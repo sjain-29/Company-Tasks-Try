@@ -1053,8 +1053,8 @@ function openProjectModal(projectId) {
         </div>
         ${manage ? `
           <form data-form="add-stage" data-project-id="${project.id}" class="flex flex-col sm:flex-row gap-2 mt-3">
-            <input type="text" name="stageName" required autocomplete="off" placeholder="Stage name (e.g. QA)" class="flex-1">
-            <input type="date" name="stageDate" class="sm:w-40">
+            <input type="text" name="stageName" required autocomplete="off" placeholder="Stage name (e.g. QA)" class="flex-1 min-w-0">
+            <input type="date" name="stageDate" class="sm:w-40 flex-shrink-0">
             <button type="submit" class="btn btn-secondary whitespace-nowrap">+ Add Stage</button>
           </form>` : ""}
       </div>
@@ -1180,8 +1180,8 @@ function openTeamModal(teamId) {
 
       ${manage ? `
       <form data-form="invite-team" data-team-id="${teamId}" class="flex flex-col sm:flex-row gap-2">
-        <input type="email" name="email" required placeholder="teammate@company.com" class="flex-1">
-        <select name="role" class="sm:w-40">
+        <input type="email" name="email" required placeholder="teammate@company.com" class="flex-1 min-w-0">
+        <select name="role" class="sm:w-40 flex-shrink-0">
           <option value="teamMember">Team Member</option>
           <option value="teamLead">Team Lead</option>
         </select>
