@@ -227,6 +227,12 @@ function teamProjectCount(teamId) {
   return Object.values(state.projects || {}).filter(p => p.teamId === teamId && p.status !== "archived").length;
 }
 function teamName(teamId) { return (state.teams[teamId] && state.teams[teamId].name) || "Unassigned team"; }
+function teamRosterEmails(teamId) {
+  const team = state.teams[teamId];
+  if (!team) return [];
+  const keys = new Set([...Object.keys(team.leadEmails || {}), ...Object.keys(team.memberEmails || {})]);
+  return [...keys].map(k => k.replace(/,/g, ".")).sort();
+}
 
 // ----------------------------------------------------------------------------
 // 5. DATA LISTENERS
@@ -955,6 +961,22 @@ function openCompanyModal(companyId) {
     </div>`);
 }
 
+function renderAssigneeChecklistHTML(teamId, checkedKeys) {
+  const roster = teamRosterEmails(teamId);
+  if (!roster.length) {
+    return `<p class="text-sm text-navy-600 italic px-1 py-1">This team has no members yet — add someone by email below, or invite them to the team first.</p>`;
+  }
+  return roster.map(email => {
+    const key = sanitizeEmailKey(email);
+    const checked = checkedKeys.has(key) ? "checked" : "";
+    return `
+      <label class="flex items-center gap-2 py-1.5 px-2 rounded-lg hover:bg-navy-100 cursor-pointer">
+        <input type="checkbox" name="assigneeCheck" value="${escapeHtml(email)}" ${checked} class="w-4 h-4 accent-[#2563EB] flex-shrink-0">
+        <span class="text-sm truncate">${escapeHtml(email)}</span>
+      </label>`;
+  }).join("");
+}
+
 // ---------------------------- New Project modal ----------------------------------
 function openNewProjectModal() {
   const teamOptions = Object.entries(state.teams).filter(([id]) => isMasterAdmin() || isTeamLead(id));
@@ -969,8 +991,9 @@ function openNewProjectModal() {
     }
     return;
   }
+  const defaultTeamId = teamOptions[0][0];
   openModal(`
-    ${modalHeader("New Project", "Set up stages and assign teammates after creating it.")}
+    ${modalHeader("New Project", "Set up stages after creating it.")}
     <form data-form="new-project" class="p-5 flex flex-col gap-4">
       <div>
         <label class="field-label">Project name</label>
@@ -982,13 +1005,19 @@ function openNewProjectModal() {
       </div>
       <div>
         <label class="field-label">Team</label>
-        <select name="teamId" required>
+        <select name="teamId" id="new-project-team-select" required>
           ${teamOptions.map(([id, t]) => `<option value="${id}">${escapeHtml(t.name)}</option>`).join("")}
         </select>
       </div>
       <div>
-        <label class="field-label">Assign members by email (optional — you can add more later)</label>
-        <input type="text" name="assignees" placeholder="jane@company.com, sam@company.com">
+        <label class="field-label">Assign members</label>
+        <div id="new-project-assignee-list" class="max-h-40 overflow-y-auto border border-navy-100 rounded-lg p-1 flex flex-col gap-0.5">
+          ${renderAssigneeChecklistHTML(defaultTeamId, new Set())}
+        </div>
+      </div>
+      <div>
+        <label class="field-label">Add someone else by email (optional)</label>
+        <input type="text" name="extraAssignees" placeholder="external.person@company.com">
       </div>
       <div class="flex gap-2 justify-end mt-2">
         <button type="button" data-action="close-modal" class="btn btn-secondary">Cancel</button>
@@ -1044,11 +1073,21 @@ function openProjectModal(projectId) {
         <div class="flex flex-wrap gap-2 mb-2" id="assignee-chips">
           ${assignees.length ? assignees.map(k => renderAssigneeChip(project.id, k, manage)).join("") : `<p class="text-sm text-navy-600 italic">No one assigned yet.</p>`}
         </div>
-        ${manage ? `
-          <form data-form="add-assignee" data-project-id="${project.id}" class="flex gap-2">
-            <input type="email" name="email" required placeholder="teammate@company.com" class="flex-1">
-            <button type="submit" class="btn btn-secondary whitespace-nowrap">Invite</button>
-          </form>` : ""}
+        ${manage ? (() => {
+          const roster = teamRosterEmails(project.teamId).filter(e => !assignees.includes(sanitizeEmailKey(e)));
+          return `
+          <form data-form="add-assignee" data-project-id="${project.id}" class="flex flex-col gap-2">
+            ${roster.length ? `
+            <select name="rosterEmail">
+              <option value="">— Choose a team member —</option>
+              ${roster.map(e => `<option value="${escapeHtml(e)}">${escapeHtml(e)}</option>`).join("")}
+            </select>` : ""}
+            <div class="flex gap-2">
+              <input type="email" name="email" placeholder="${roster.length ? "…or add someone outside the team" : "teammate@company.com"}" class="flex-1">
+              <button type="submit" class="btn btn-secondary whitespace-nowrap">Add</button>
+            </div>
+          </form>`;
+        })() : ""}
       </div>
     </div>
 
@@ -1281,6 +1320,13 @@ document.addEventListener("input", (e) => {
   }
 });
 
+document.addEventListener("change", (e) => {
+  if (e.target.id === "new-project-team-select") {
+    const list = document.getElementById("new-project-assignee-list");
+    if (list) list.innerHTML = renderAssigneeChecklistHTML(e.target.value, new Set());
+  }
+});
+
 document.getElementById("hamburger-btn").addEventListener("click", () => {
   state.sidebarOpen = !state.sidebarOpen; renderSidebar();
 });
@@ -1331,9 +1377,11 @@ document.addEventListener("submit", async (e) => {
     }
 
     else if (type === "new-project") {
-      const assignees = (fd.get("assignees") || "").split(",").map(s => s.trim()).filter(Boolean);
-      const invalid = assignees.filter(a => !validEmail(a));
-      if (invalid.length) throw new Error(`Invalid email(s): ${invalid.join(", ")}`);
+      const checked = Array.from(form.querySelectorAll('input[name="assigneeCheck"]:checked')).map(cb => cb.value);
+      const extra = (fd.get("extraAssignees") || "").split(",").map(s => s.trim()).filter(Boolean);
+      const invalidExtra = extra.filter(a => !validEmail(a));
+      if (invalidExtra.length) throw new Error(`Invalid email(s): ${invalidExtra.join(", ")}`);
+      const assignees = [...new Set([...checked, ...extra])];
       await createProject({
         name: fd.get("name").trim(), description: fd.get("description").trim(),
         teamId: fd.get("teamId"), assignedEmails: assignees,
@@ -1347,8 +1395,10 @@ document.addEventListener("submit", async (e) => {
     }
 
     else if (type === "add-assignee") {
-      await addProjectAssignee(form.dataset.projectId, fd.get("email").trim());
-      toast("Member invited to project."); openProjectModal(form.dataset.projectId);
+      const chosen = (fd.get("rosterEmail") || "").trim() || (fd.get("email") || "").trim();
+      if (!chosen) throw new Error("Choose a team member or enter an email.");
+      await addProjectAssignee(form.dataset.projectId, chosen);
+      toast("Member added to project."); openProjectModal(form.dataset.projectId);
     }
 
     else if (type === "update-stage-date") {
