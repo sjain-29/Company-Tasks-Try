@@ -1018,8 +1018,9 @@ function openNewProjectModal() {
 
 // ---------------------------- Project detail modal ----------------------------------
 function openProjectModal(projectId) {
-  const project = state.projects[projectId];
-  if (!project) { toast("Project not found.", "error"); return; }
+  const raw = state.projects[projectId];
+  if (!raw) { toast("Project not found.", "error"); return; }
+  const project = { id: projectId, ...raw };
   const manage = canManageProject(project);
   const canCheck = canToggleStage(project);
   const stages = Object.entries(project.stages || {})
@@ -1052,7 +1053,7 @@ function openProjectModal(projectId) {
         </div>
         ${manage ? `
           <form data-form="add-stage" data-project-id="${project.id}" class="flex flex-col sm:flex-row gap-2 mt-3">
-            <input type="text" name="stageName" required placeholder="Stage name (e.g. QA)" class="flex-1">
+            <input type="text" name="stageName" required autocomplete="off" placeholder="Stage name (e.g. QA)" class="flex-1">
             <input type="date" name="stageDate" class="sm:w-40">
             <button type="submit" class="btn btn-secondary whitespace-nowrap">+ Add Stage</button>
           </form>` : ""}
