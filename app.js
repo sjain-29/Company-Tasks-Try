@@ -329,11 +329,33 @@ async function acceptInvite({ name, email, password }) {
     // The invite must be read AFTER authenticating — the rule that lets someone
     // read a platformInvite requires it to match their own signed-in email, which
     // doesn't exist until the account itself is created.
-    cred = await createUserWithEmailAndPassword(auth, email, password);
+    try {
+      cred = await createUserWithEmailAndPassword(auth, email, password);
+    } catch (err) {
+      if (err.code === "auth/email-already-in-use") {
+        // Most likely a previous attempt got as far as creating the login but
+        // failed on a later step (e.g. rules not published yet at the time).
+        // If the password just typed matches, sign into that same account and
+        // pick up provisioning where it left off, instead of dead-ending here.
+        try {
+          cred = await signInWithEmailAndPassword(auth, email, password);
+        } catch (signInErr) {
+          throw new Error(
+            "An account for this email already exists but that password didn't match it. " +
+            "Use Sign In instead, or use Forgot Password to reset it."
+          );
+        }
+      } else {
+        throw err;
+      }
+    }
+
     const inviteSnap = await get(ref(controlDb, `platformInvites/${emailKey}`));
     if (!inviteSnap.exists()) {
-      await cred.user.delete();
-      throw new Error("No pending invite found for this email. Ask your admin to invite you first.");
+      throw new Error(
+        "No pending invite found for this email. If your admin already invited you, " +
+        "this may mean your account is already active — try Sign In instead."
+      );
     }
     const invite = inviteSnap.val();
     const tdb = getDatabase(app, invite.databaseURL);
