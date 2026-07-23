@@ -158,6 +158,10 @@ function setBusy(btn, busy, label) {
 }
 function validEmail(e) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((e || "").trim()); }
 function validDbUrl(u) { return /^https:\/\/.+/.test((u || "").trim()); }
+// Firebase Auth always normalizes an account's email to lowercase. Every email we
+// WRITE into the database must match that exactly, or later rule comparisons
+// against auth.token.email (which is always lowercase) will silently fail.
+function normalizeEmail(e) { return (e || "").trim().toLowerCase(); }
 
 // ----------------------------------------------------------------------------
 // 4. ROLE / VISIBILITY HELPERS  (all scoped to the CURRENT company only —
@@ -305,10 +309,11 @@ async function resolveAndActivateSession(firebaseUser) {
 async function handleSignIn(email, password) {
   // No manual provisioning here — resolveAndActivateSession() runs from the
   // normal onAuthStateChanged listener since the account already exists.
-  await signInWithEmailAndPassword(auth, email, password);
+  await signInWithEmailAndPassword(auth, normalizeEmail(email), password);
 }
 
 async function becomeCreator({ name, email, password }) {
+  email = normalizeEmail(email);
   state.authInProgress = true; // block onAuthStateChanged until we've finished provisioning
   try {
     const cred = await createUserWithEmailAndPassword(auth, email, password);
@@ -322,6 +327,7 @@ async function becomeCreator({ name, email, password }) {
 }
 
 async function acceptInvite({ name, email, password }) {
+  email = normalizeEmail(email);
   const emailKey = sanitizeEmailKey(email);
   state.authInProgress = true;
   let cred;
@@ -384,6 +390,7 @@ async function acceptInvite({ name, email, password }) {
 // 8. CRUD — Creator: Companies
 // ----------------------------------------------------------------------------
 async function registerCompany({ name, databaseURL, adminEmail }) {
+  adminEmail = normalizeEmail(adminEmail);
   const companyId = "company_" + uid();
   await set(ref(controlDb, `companies/${companyId}`), {
     name, databaseURL, createdAt: Date.now(), createdBy: state.user.email,
@@ -396,6 +403,7 @@ async function registerCompany({ name, databaseURL, adminEmail }) {
   return companyId;
 }
 async function inviteAdditionalMasterAdmin(companyId, companyName, databaseURL, email) {
+  email = normalizeEmail(email);
   const emailKey = sanitizeEmailKey(email);
   await set(ref(controlDb, `platformInvites/${emailKey}`), {
     email, role: "masterAdmin", companyId, companyName, databaseURL,
@@ -422,6 +430,7 @@ async function createTeam(name) {
   return id;
 }
 async function inviteToTeam(teamId, email, teamRole) {
+  email = normalizeEmail(email);
   const emailKey = sanitizeEmailKey(email);
   const field = teamRole === "teamLead" ? "leadEmails" : "memberEmails";
   await update(ref(tenantDb, `teams/${teamId}/${field}`), { [emailKey]: true });
@@ -437,6 +446,7 @@ async function removeFromTeam(teamId, emailKey, field) {
   await remove(ref(tenantDb, `teams/${teamId}/${field}/${emailKey}`));
 }
 async function inviteCoAdmin(email) {
+  email = normalizeEmail(email);
   const emailKey = sanitizeEmailKey(email);
   await set(ref(controlDb, `platformInvites/${emailKey}`), {
     email, role: "masterAdmin", companyId: state.company.id, companyName: state.company.name,
@@ -463,6 +473,7 @@ async function mirrorProjectIndex(projectId, assignedEmailsObj) {
 }
 async function addProjectAssignee(projectId, email) {
   if (!validEmail(email)) throw new Error("Enter a valid email address.");
+  email = normalizeEmail(email);
   const emailKey = sanitizeEmailKey(email);
   await update(ref(tenantDb, `projects/${projectId}/assignedEmails`), { [emailKey]: true });
   await update(ref(tenantDb), { [`userProjectIndex/${emailKey}/${projectId}`]: true });
