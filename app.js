@@ -44,13 +44,13 @@ import {
 //    register that company (see README for how to provision one).
 // ----------------------------------------------------------------------------
 const firebaseConfig = {
-  apiKey: "YOUR_FIREBASE_API_KEY",
+  apiKey: "AIzaSyAQlVa_wzc8EO0lpYUo1svL7-NWEv6B9VI",
   authDomain: "office-projects-c0d04.firebaseapp.com",
   databaseURL: "https://office-projects-c0d04-default-rtdb.europe-west1.firebasedatabase.app/",
   projectId: "office-projects-c0d04",
   storageBucket: "office-projects-c0d04.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID"
+  messagingSenderId: "1041733503584",
+  appId: "1:1041733503584:web:37c4b7d2f8fd19c85a5105"
 };
 const CONTROL_DB_URL = firebaseConfig.databaseURL;
 
