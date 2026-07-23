@@ -713,14 +713,20 @@ function renderDashboard() {
 }
 
 function renderEmptyState() {
+  const noTeamsYet = canCreateProject() && Object.keys(state.teams).length === 0;
   return `
     <div class="card p-10 flex flex-col items-center text-center gap-3 mt-2">
       <div class="w-14 h-14 rounded-2xl brand-gradient flex items-center justify-center">
         <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
       </div>
       <h3 class="font-display font-bold text-lg">${state.searchTerm ? "No matching projects" : "No projects here yet"}</h3>
-      <p class="text-sm text-navy-600 max-w-sm">${state.searchTerm ? "Try a different search term or clear your filters." : (canCreateProject() ? "Create your first project to define stages, set dates, and assign your team." : "Projects you're assigned to will show up here once your team lead adds you.")}</p>
-      ${(!state.searchTerm && canCreateProject()) ? `<button data-action="new-project" class="btn btn-primary mt-1">Create a Project</button>` : ``}
+      <p class="text-sm text-navy-600 max-w-sm">${
+        state.searchTerm ? "Try a different search term or clear your filters."
+        : noTeamsYet ? "Every project belongs to a team. Create your first team to get started."
+        : canCreateProject() ? "Create your first project to define stages, set dates, and assign your team."
+        : "Projects you're assigned to will show up here once your team lead adds you."
+      }</p>
+      ${(!state.searchTerm && canCreateProject()) ? `<button data-action="new-project" class="btn btn-primary mt-1">${noTeamsYet ? "Create a Team" : "Create a Project"}</button>` : ``}
     </div>`;
 }
 
@@ -952,7 +958,17 @@ function openCompanyModal(companyId) {
 // ---------------------------- New Project modal ----------------------------------
 function openNewProjectModal() {
   const teamOptions = Object.entries(state.teams).filter(([id]) => isMasterAdmin() || isTeamLead(id));
-  if (!teamOptions.length) { toast("You need to lead a team before creating a project.", "error"); return; }
+  if (!teamOptions.length) {
+    if (isMasterAdmin()) {
+      toast("Every project needs a team — create one first.", "info");
+      state.currentView = "teams";
+      render();
+      openNewTeamModal();
+    } else {
+      toast("You need to lead a team before creating a project.", "error");
+    }
+    return;
+  }
   openModal(`
     ${modalHeader("New Project", "Set up stages and assign teammates after creating it.")}
     <form data-form="new-project" class="p-5 flex flex-col gap-4">
