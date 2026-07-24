@@ -162,6 +162,17 @@ function validDbUrl(u) { return /^https:\/\/.+/.test((u || "").trim()); }
 // WRITE into the database must match that exactly, or later rule comparisons
 // against auth.token.email (which is always lowercase) will silently fail.
 function normalizeEmail(e) { return (e || "").trim().toLowerCase(); }
+// Wraps a database operation so that if it fails, the error message says WHICH
+// step broke (e.g. "join the team roster") instead of just a raw Firebase code —
+// makes permission errors diagnosable from the toast alone, no console needed.
+async function step(label, fn) {
+  try {
+    return await fn();
+  } catch (err) {
+    const detail = err && err.message ? err.message : String(err);
+    throw new Error(`Couldn't ${label}: ${detail}`);
+  }
+}
 
 // ----------------------------------------------------------------------------
 // 4. ROLE / VISIBILITY HELPERS  (all scoped to the CURRENT company only —
@@ -323,10 +334,11 @@ async function becomeCreator({ name, email, password }) {
   state.authInProgress = true; // block onAuthStateChanged until we've finished provisioning
   try {
     const cred = await createUserWithEmailAndPassword(auth, email, password);
-    await set(ref(controlDb, `creators/${cred.user.uid}`), true);
-    await set(ref(controlDb, `creatorProfiles/${cred.user.uid}`), { name, email, createdAt: Date.now() });
-    await set(ref(controlDb, "platformBootstrapped"), true);
-    await resolveAndActivateSession(cred.user);
+    await step("register you as Creator", () => set(ref(controlDb, `creators/${cred.user.uid}`), true));
+    await step("save your Creator profile", () =>
+      set(ref(controlDb, `creatorProfiles/${cred.user.uid}`), { name, email, createdAt: Date.now() }));
+    await step("mark the platform as bootstrapped", () => set(ref(controlDb, "platformBootstrapped"), true));
+    await step("load your session", () => resolveAndActivateSession(cred.user));
   } finally {
     state.authInProgress = false;
   }
@@ -362,7 +374,7 @@ async function acceptInvite({ name, email, password }) {
       }
     }
 
-    const inviteSnap = await get(ref(controlDb, `platformInvites/${emailKey}`));
+    const inviteSnap = await step("read your invite", () => get(ref(controlDb, `platformInvites/${emailKey}`)));
     if (!inviteSnap.exists()) {
       throw new Error(
         "No pending invite found for this email. If your admin already invited you, " +
@@ -372,21 +384,26 @@ async function acceptInvite({ name, email, password }) {
     const invite = inviteSnap.val();
     const tdb = getDatabase(app, invite.databaseURL);
 
-    await set(ref(tdb, `users/${cred.user.uid}`), { email, name, role: invite.role, createdAt: Date.now() });
-    await set(ref(controlDb, `memberCompany/${cred.user.uid}`), { companyId: invite.companyId, role: invite.role, email });
+    await step("save your profile", () =>
+      set(ref(tdb, `users/${cred.user.uid}`), { email, name, role: invite.role, createdAt: Date.now() }));
+    await step("link your account to the company", () =>
+      set(ref(controlDb, `memberCompany/${cred.user.uid}`), { companyId: invite.companyId, role: invite.role, email }));
 
     if (invite.teamId) {
       const field = invite.role === "teamLead" ? "leadUids" : "memberUids";
-      await update(ref(tdb, `teams/${invite.teamId}/${field}`), { [cred.user.uid]: true });
+      await step("join the team roster", () =>
+        update(ref(tdb, `teams/${invite.teamId}/${field}`), { [cred.user.uid]: true }));
     }
     if (invite.role === "masterAdmin") {
-      await set(ref(tdb, "meta"), { name: invite.companyName, createdAt: Date.now() });
+      await step("set up the company record", () =>
+        set(ref(tdb, "meta"), { name: invite.companyName, createdAt: Date.now() }));
     }
-    await remove(ref(tdb, `pendingInvites/${emailKey}`));
-    await remove(ref(controlDb, `platformInvites/${emailKey}`));
-    await set(ref(controlDb, `userRouting/${emailKey}`), { companyId: invite.companyId, databaseURL: invite.databaseURL, email });
+    await step("clear the team invite", () => remove(ref(tdb, `pendingInvites/${emailKey}`)));
+    await step("clear the platform invite", () => remove(ref(controlDb, `platformInvites/${emailKey}`)));
+    await step("save your login routing", () =>
+      set(ref(controlDb, `userRouting/${emailKey}`), { companyId: invite.companyId, databaseURL: invite.databaseURL, email }));
 
-    await resolveAndActivateSession(cred.user);
+    await step("load your session", () => resolveAndActivateSession(cred.user));
   } finally {
     state.authInProgress = false;
   }
