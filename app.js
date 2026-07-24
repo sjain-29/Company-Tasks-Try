@@ -1052,10 +1052,12 @@ function openProjectModal(projectId) {
           ${stages.length ? stages.map(s => renderStageRow(project.id, s, manage, canCheck)).join("") : `<p class="text-sm text-navy-600 italic">No stages yet.</p>`}
         </div>
         ${manage ? `
-          <form data-form="add-stage" data-project-id="${project.id}" class="flex flex-col sm:flex-row gap-2 mt-3">
-            <input type="text" name="stageName" required autocomplete="off" placeholder="Stage name (e.g. QA)" class="flex-1 min-w-0">
-            <input type="date" name="stageDate" class="sm:w-40 flex-shrink-0">
-            <button type="submit" class="btn btn-secondary whitespace-nowrap">+ Add Stage</button>
+          <form data-form="add-stage" data-project-id="${project.id}" class="flex flex-col gap-2 mt-3">
+            <input type="text" name="stageName" required autocomplete="off" placeholder="Stage name (e.g. QA)" class="w-full">
+            <div class="flex gap-2">
+              <input type="date" name="stageDate" class="flex-1 min-w-0">
+              <button type="submit" class="btn btn-secondary whitespace-nowrap flex-shrink-0">+ Add Stage</button>
+            </div>
           </form>` : ""}
       </div>
 
