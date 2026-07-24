@@ -1,0 +1,53 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+
+    "creators": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.uid === $uid && !root.child('creators').exists()"
+      }
+    },
+
+    "platformBootstrapped": {
+      ".read": true,
+      ".write": "auth != null && !data.exists() && root.child('creators').child(auth.uid).val() === true"
+    },
+
+    "creatorProfiles": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.uid === $uid"
+      }
+    },
+
+    "companies": {
+      ".read": "auth != null && root.child('creators').child(auth.uid).val() === true",
+      "$companyId": {
+        ".write": "auth != null && root.child('creators').child(auth.uid).val() === true"
+      }
+    },
+
+    "memberCompany": {
+      "$uid": {
+        ".read": "auth != null && ( auth.uid === $uid || root.child('creators').child(auth.uid).val() === true )",
+        ".write": "auth != null && auth.uid === $uid && ( !data.exists() || newData.child('role').val() !== 'masterAdmin' || data.child('role').val() === 'masterAdmin' )"
+      }
+    },
+
+    "platformInvites": {
+      "$emailKey": {
+        ".read": "auth != null && ( root.child('creators').child(auth.uid).val() === true || data.child('email').val() === auth.token.email || root.child('memberCompany').child(auth.uid).child('companyId').val() === data.child('companyId').val() )",
+        ".write": "auth != null && ( root.child('creators').child(auth.uid).val() === true || data.child('email').val() === auth.token.email || (!data.exists() && !newData.exists()) || ( !data.exists() && root.child('memberCompany').child(auth.uid).child('companyId').val() === newData.child('companyId').val() && ( root.child('memberCompany').child(auth.uid).child('role').val() === 'masterAdmin' || root.child('memberCompany').child(auth.uid).child('role').val() === 'teamLead' ) && ( newData.child('role').val() !== 'masterAdmin' || root.child('memberCompany').child(auth.uid).child('role').val() === 'masterAdmin' ) ) )"
+      }
+    },
+
+    "userRouting": {
+      "$emailKey": {
+        ".read": "auth != null && ( !data.exists() || data.child('email').val() === auth.token.email )",
+        ".write": "auth != null && ( !data.exists() || data.child('email').val() === auth.token.email ) && newData.child('email').val() === auth.token.email"
+      }
+    }
+  }
+}
